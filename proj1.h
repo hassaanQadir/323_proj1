@@ -2,6 +2,9 @@
 //
 // System header files and macros for proj1
 
+#ifndef PROJ1_H
+#define PROJ1_H
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <ctype.h>
@@ -18,3 +21,8 @@
 // Double the size of an allocated block PTR with NMEMB members and update
 // NMEMB accordingly.  (NMEMB is only the size in bytes if PTR is a char *.)
 #define DOUBLE(ptr,nmemb) realloc (ptr, (nmemb *= 2) * sizeof(*ptr))
+
+void read_and_print_file(const char *filename);
+
+#endif
+
