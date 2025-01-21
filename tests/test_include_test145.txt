@@ -1,0 +1,3 @@
+\include{../tests/test1.txt}
+\include{../tests/test4.txt}
+\include{../tests/test5.txt}

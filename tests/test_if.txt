@@ -1,0 +1,5 @@
+\if{xyz}{COND WAS NONEMPTY}{COND WAS EMPTY}
+\if{}{THIS IS THEN}{THIS IS ELSE}
+
+\def{X}{macro is defined}
+\if{\X{}}{Don't expand me}{ELSE BLOCK}

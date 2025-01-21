@@ -94,6 +94,67 @@ static char* read_all_input_and_remove_comments(int argc, char *argv[]) {
 }
 
 /**
+ * read_included_file:
+ *   Given a path to a file, opens it and reads it into a buffer,
+ *   removing comments (just like your main input). Returns a
+ *   malloc'd string containing the cleaned text. Exits on error.
+ */
+char *read_included_file(const char *path) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) {
+        fprintf(stderr, "Error: Cannot open file '%s'\n", path);
+        exit(EXIT_FAILURE);
+    }
+
+    // We'll do a simple dynamic buffer approach
+    size_t cap = 8192;
+    size_t len = 0;
+    char *buffer = malloc(cap);
+    if (!buffer) {
+        fprintf(stderr, "Error: malloc failed in read_included_file\n");
+        exit(EXIT_FAILURE);
+    }
+
+    #define APPEND_CHAR(c) \
+        do { \
+            if (len + 1 >= cap) { \
+                cap *= 2; \
+                buffer = realloc(buffer, cap); \
+                if (!buffer) { \
+                    fprintf(stderr, "Error: realloc failed\n"); \
+                    exit(EXIT_FAILURE); \
+                } \
+            } \
+            buffer[len++] = (c); \
+        } while(0)
+
+    int c, prev = 0;
+    while ((c = fgetc(fp)) != EOF) {
+        // If we see '%' and it's not escaped by '\', skip until newline
+        if (c == '%' && prev != '\\') {
+            // skip to newline
+            while ((c = fgetc(fp)) != EOF && c != '\n');
+            if (c != EOF) {
+                // put the newline in the buffer
+                APPEND_CHAR('\n');
+            }
+            prev = 0;
+            continue;
+        }
+
+        APPEND_CHAR(c);
+        prev = c;
+    }
+
+    fclose(fp);
+    APPEND_CHAR('\0');  // null-terminate
+
+    #undef APPEND_CHAR
+    return buffer;
+}
+
+
+/**
  * Skeleton function to parse the big input string and do expansions.
  * We'll do:
  *   - look for macros: \...
@@ -176,6 +237,178 @@ static void expand_text(MacroTable *table, const char *input) {
                     free(arg1);
                     // expands to empty
                     continue;
+                } else if (strcmp(nameBuf, "if") == 0) {
+                    // We expect 3 arguments: {COND}, {THEN}, {ELSE}
+                    extern char *readArg(const char **pp);
+
+                    char *condArg = readArg(&p);   // the COND
+                    char *thenArg = readArg(&p);   // the THEN
+                    char *elseArg = readArg(&p);   // the ELSE
+
+                    // Error out if any argument is missing
+                    if (!condArg || !thenArg || !elseArg) {
+                        fprintf(stderr, "Error: \\if requires 3 arguments\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    // Check if COND is empty (not expanded!)
+                    // If condArg is "", that means false => use elseArg
+                    // If condArg is non-empty => use thenArg
+                    const char *branch = (condArg[0] == '\0') ? elseArg : thenArg;
+
+                    // 1) "Replace" the \if macro with the chosen branch
+                    // 2) Then we need to parse/expand that chosen branch
+                    //    so that macros within it are handled.
+                    
+                    // Easiest approach: use your existing expand_text
+                    // But we also have leftover text in 'p' after this macro.
+                    // We'll do a small trick: 
+                    //
+                    //    - expand 'branch' into a temporary buffer or directly by calling expand_text
+                    //    - print or store that expansion
+                    //    - continue 'expand_text' after this macro is done
+                    // 
+                    // For a quick approach, let's do an inline sub-call:
+
+                    // We'll store the remainder (p) in a temp variable:
+                    const char *remaining = p;
+
+                    // We'll parse branch first, then parse remaining second. 
+                    // But we don't want to lose our recursion logic.
+                    // A naive solution: 
+                    //   - call expand_text(table, branch)
+                    //   - then call expand_text(table, remaining)
+                    //   - return from this function (so we don't keep going char-by-char)
+                    //
+                    // Alternatively, you could "inject" branch into your output buffer, 
+                    // then keep going from there. 
+                    // We'll show the naive approach for clarity.
+
+                    expand_text(table, branch);  // expand THEN or ELSE text
+                    // Now expand the rest of the current string
+                    expand_text(table, remaining);
+
+                    // Free allocated arg strings
+                    free(condArg);
+                    free(thenArg);
+                    free(elseArg);
+
+                    // We must return here because we've effectively re-run expand_text 
+                    // for the remainder. If we continued the current while loop, 
+                    // we'd double-process the leftover text.
+                    return;
+                } else if (strcmp(nameBuf, "ifdef") == 0) {
+                    // We expect 3 arguments: {NAME}, {THEN}, {ELSE}
+                    extern char *readArg(const char **pp);
+
+                    char *nameArg = readArg(&p);  // The macro name
+                    char *thenArg = readArg(&p);
+                    char *elseArg = readArg(&p);
+
+                    // Check for missing arguments
+                    if (!nameArg || !thenArg || !elseArg) {
+                        fprintf(stderr, "Error: \\ifdef requires 3 arguments\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    // Validate nameArg is alphanumeric
+                    for (char *c = nameArg; *c; c++) {
+                        if (!isalnum((unsigned char)*c)) {
+                            fprintf(stderr, "Error: invalid macro name in \\ifdef\n");
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+
+                    // Condition: if nameArg is defined => use thenArg, else use elseArg
+                    char *macroVal = lookup_macro(table, nameArg);
+                    const char *branch = (macroVal != NULL) ? thenArg : elseArg;
+
+                    // Same approach as for \if:
+                    // We'll do a naive approach: expand 'branch', then expand the leftover text
+
+                    const char *remaining = p; // store leftover text
+
+                    expand_text(table, branch);   // expand the chosen branch
+                    expand_text(table, remaining);
+
+                    // Free
+                    free(nameArg);
+                    free(thenArg);
+                    free(elseArg);
+
+                    // Return to avoid double-processing
+                    return;
+                } else if (strcmp(nameBuf, "include") == 0) {
+                    extern char *readArg(const char **pp);
+                    char *pathArg = readArg(&p);  // parse the single {PATH} argument
+
+                    if (!pathArg) {
+                        fprintf(stderr, "Error: \\include requires 1 argument\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    // We'll read and parse the included file's text
+                    // Then we expand it, then continue with the leftover input.
+
+                    // leftover input after the macro
+                    const char *remaining = p;
+
+                    // Expand the file's contents 
+                    char *includedText = read_included_file(pathArg);
+                    expand_text(table, includedText);
+
+                    // After finishing the included file, continue with the rest
+                    expand_text(table, remaining);
+
+                    // Clean up
+                    free(includedText);
+                    free(pathArg);
+
+                    // Return so we don't double-process leftover text in this function
+                    return;
+                } else if (strcmp(nameBuf, "expandafter") == 0) {
+                    extern char *readArg(const char **pp);
+
+                    // Parse the 2 brace-balanced arguments: {BEFORE} and {AFTER}
+                    char *beforeArg = readArg(&p);  // {BEFORE}
+                    char *afterArg  = readArg(&p);  // {AFTER}
+
+                    if (!beforeArg || !afterArg) {
+                        fprintf(stderr, "Error: \\expandafter requires 2 arguments\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    // leftover text after \expandafter macro
+                    const char *remaining = p;
+
+                    // Step 1: Fully expand 'afterArg' as if it were alone
+                    char *expandedAfter = expand_text_into_string(table, afterArg);
+
+                    // Step 2: Create a buffer that concatenates BEFORE + expandedAfter
+                    // We do NOT expand 'beforeArg' yet; we just place it as-is.
+                    char *combined = combine_strings(beforeArg, expandedAfter);
+
+                    // Step 3: Now parse 'combined' from the start.
+                    // Because 'expand_text_into_string' is a helper that returns a fully expanded string,
+                    // we want to treat 'beforeArg' as unexpanded macros + 'expandedAfter' as literal text
+                    // that was already expanded. 
+                    // But the assignment says "standard expansion processing should continue,
+                    // starting from the start of BEFORE." 
+                    // So we do a new call to expand_text, so any new macros in 'expandedAfter'
+                    // can affect 'beforeArg'.
+
+                    expand_text(table, combined);
+
+                    // Step 4: Finally, expand the leftover text after \expandafter
+                    expand_text(table, remaining);
+
+                    // Clean up
+                    free(beforeArg);
+                    free(afterArg);
+                    free(expandedAfter);
+                    free(combined);
+
+                    return; // done handling \expandafter
                 } else {
                     // It's either user-defined or another built-in (if, ifdef, include, etc.)
                     // Let's check if user-defined:

@@ -1,0 +1,9 @@
+\ifdef{M}{M is defined}{M is not defined}
+
+\def{M}{stuff}
+
+\ifdef{M}{M is defined}{M is not defined}
+
+\undef{M}
+
+\ifdef{M}{Yes}{No}
