@@ -109,7 +109,7 @@ static void expand_text(MacroTable *table, const char *input) {
     while (*p != '\0') {
         if (*p == '\\') {
             // Could be a macro or an escape
-            const char *macroStart = p;
+            // const char *macroStart = p;
             p++; // skip the backslash
 
             // Check if next char is one of the special escapes: \, {, }, #, %
@@ -200,29 +200,69 @@ static void expand_text(MacroTable *table, const char *input) {
                     char *outBuf = malloc(outCap);
                     if (!outBuf) exit(EXIT_FAILURE);
 
-                    while (*m) {
-                        if (*m == '#' && arg1) {
-                            // insert arg1
-                            size_t argLen = strlen(arg1);
-                            // ensure capacity
-                            while (outLen + argLen + 1 >= outCap) {
-                                outCap *= 2;
-                                outBuf = realloc(outBuf, outCap);
-                                if (!outBuf) exit(EXIT_FAILURE);
+                    while (*m != '\0') {
+                        if (*m == '\\') {
+                            // Look ahead to the next character
+                            char next = *(m + 1);
+
+                            // If we're at the end of the string (backslash is the last char), just output '\'
+                            if (next == '\0') {
+                                outBuf[outLen++] = '\\';
+                                m++;
+                                continue;
                             }
-                            memcpy(outBuf + outLen, arg1, argLen);
-                            outLen += argLen;
-                            m++;
-                        } else {
-                            // copy normal char
-                            if (outLen + 2 >= outCap) {
-                                outCap *= 2;
-                                outBuf = realloc(outBuf, outCap);
-                                if (!outBuf) exit(EXIT_FAILURE);
+
+                            // 1) If next is one of the special escapes: \, {, }, #, %
+                            if (next == '\\' || next == '{' || next == '}' ||
+                                next == '#' || next == '%') {
+                                // "When it's time to output, ignore the backslash and output only the second char."
+                                outBuf[outLen++] = next;
+                                m += 2;  // skip "\X"
                             }
+                            // 2) If next is alphanumeric => typically this is a macro start in the main parser,
+                            //    but inside a macro *value*, you might want to treat it as literal or do a second pass.
+                            else if (isalnum((unsigned char) next)) {
+                                // Possibly a macro? In a simple approach, output them literally:
+                                outBuf[outLen++] = '\\';
+                                outBuf[outLen++] = next;
+                                m += 2;
+                            }
+                            // 3) Otherwise, next is not special => output both
+                            else {
+                                outBuf[outLen++] = '\\';
+                                outBuf[outLen++] = next;
+                                m += 2;
+                            }
+                        }
+                        else if (*m == '#') {
+                            // This is an *unescaped* '#'. If your macro allows argument substitution:
+                            if (arg1) {
+                                // Insert arg1 in place of '#'
+                                size_t argLen = strlen(arg1);
+                                // expand buffer if needed
+                                while (outLen + argLen + 1 >= outCap) {
+                                    outCap *= 2;
+                                    outBuf = realloc(outBuf, outCap);
+                                    if (!outBuf) exit(EXIT_FAILURE);
+                                }
+                                memcpy(outBuf + outLen, arg1, argLen);
+                                outLen += argLen;
+                            }
+                            m++; // skip the '#'
+                        }
+                        else {
+                            // Normal character => just copy
                             outBuf[outLen++] = *m++;
                         }
+
+                        // Expand buffer if needed
+                        if (outLen + 1 >= outCap) {
+                            outCap *= 2;
+                            outBuf = realloc(outBuf, outCap);
+                            if (!outBuf) exit(EXIT_FAILURE);
+                        }
                     }
+
                     outBuf[outLen] = '\0';
 
                     // Now we've expanded user macro into outBuf

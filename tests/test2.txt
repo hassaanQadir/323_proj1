@@ -1,0 +1,2 @@
+\def{M}{some text}
+\def{M}{other text}

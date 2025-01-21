@@ -1,5 +1,6 @@
 // File: macros.c
 
+#define _POSIX_C_SOURCE 200809L
 #include "macros.h"
 #include <stdio.h>
 #include <stdlib.h>
