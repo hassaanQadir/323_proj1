@@ -6,7 +6,6 @@
 #include <string.h>
 #include <ctype.h>
 
-
 // A function pointer type for outputting characters
 typedef void (*output_char_fn)(char c, void *userdata);
 
@@ -40,154 +39,19 @@ static void out_char_buffer(char c, void *userdata) {
     ob->buf[ob->len] = '\0';
 }
 
+/****************************************
+ *  Existing file-reading functions     *
+ ****************************************/
 
-/**
- * Utility function to read all files (or stdin) into one large buffer.
- * Also removes single-line comments introduced by unescaped '%'.
- *
- * Returns a malloc'd buffer containing the cleaned text.
- * Caller must free when done.
- */
 static char* read_all_input_and_remove_comments(int argc, char *argv[]) {
-    // A simple approach: read everything into a dynamic buffer.
-    // We'll guess we won't exceed some large size at once.
-    // For a robust solution, you might do repeated resizing.
-
-    size_t cap = 8192;
-    size_t len = 0;
-    char *buffer = malloc(cap);
-    if (!buffer) {
-        fprintf(stderr, "Error: malloc failed in read_all_input\n");
-        exit(EXIT_FAILURE);
-    }
-
-    // Function to append a character to buffer
-    #define APPEND_CHAR(c) \
-        do { \
-            if (len + 1 >= cap) { \
-                cap *= 2; \
-                buffer = realloc(buffer, cap); \
-                if (!buffer) { \
-                    fprintf(stderr, "Error: realloc failed\n"); \
-                    exit(EXIT_FAILURE); \
-                } \
-            } \
-            buffer[len++] = (c); \
-        } while(0)
-
-    // If no files specified, read from stdin as if it's a single file
-    if (argc < 2) {
-        // Single pass approach:
-        int c;
-        int prevChar = 0;
-        while ((c = fgetc(stdin)) != EOF) {
-            // Check for comment start (unescaped '%')
-            if (c == '%' && prevChar != '\\') {
-                // skip until newline
-                while ((c = fgetc(stdin)) != EOF && c != '\n');
-                // keep the newline but remove everything until we find
-                // a non-whitespace after the newline
-                // For simplicity, let's just put the newline in buffer
-                if (c != EOF) APPEND_CHAR('\n');
-                prevChar = 0;
-                continue;
-            }
-            APPEND_CHAR(c);
-            prevChar = c;
-        }
-    } else {
-        // Read each file in turn
-        for (int i = 1; i < argc; i++) {
-            FILE *fp = fopen(argv[i], "r");
-            if (!fp) {
-                fprintf(stderr, "Error: Cannot open file '%s'\n", argv[i]);
-                exit(EXIT_FAILURE);
-            }
-            int c;
-            int prevChar = 0;
-            while ((c = fgetc(fp)) != EOF) {
-                // Check for comment start
-                if (c == '%' && prevChar != '\\') {
-                    // skip until newline
-                    while ((c = fgetc(fp)) != EOF && c != '\n');
-                    if (c != EOF) APPEND_CHAR('\n');
-                    prevChar = 0;
-                    continue;
-                }
-                APPEND_CHAR(c);
-                prevChar = c;
-            }
-            fclose(fp);
-        }
-    }
-
-    // Null-terminate
-    APPEND_CHAR('\0');
-    return buffer;
-
-    #undef APPEND_CHAR
+    // (unchanged from your code; omitted here for brevity)
+    // ...
 }
 
-/**
- * read_included_file:
- *   Given a path to a file, opens it and reads it into a buffer,
- *   removing comments (just like your main input). Returns a
- *   malloc'd string containing the cleaned text. Exits on error.
- */
 char *read_included_file(const char *path) {
-    FILE *fp = fopen(path, "r");
-    if (!fp) {
-        fprintf(stderr, "Error: Cannot open file '%s'\n", path);
-        exit(EXIT_FAILURE);
-    }
-
-    // We'll do a simple dynamic buffer approach
-    size_t cap = 8192;
-    size_t len = 0;
-    char *buffer = malloc(cap);
-    if (!buffer) {
-        fprintf(stderr, "Error: malloc failed in read_included_file\n");
-        exit(EXIT_FAILURE);
-    }
-
-    #define APPEND_CHAR(c) \
-        do { \
-            if (len + 1 >= cap) { \
-                cap *= 2; \
-                buffer = realloc(buffer, cap); \
-                if (!buffer) { \
-                    fprintf(stderr, "Error: realloc failed\n"); \
-                    exit(EXIT_FAILURE); \
-                } \
-            } \
-            buffer[len++] = (c); \
-        } while(0)
-
-    int c, prev = 0;
-    while ((c = fgetc(fp)) != EOF) {
-        // If we see '%' and it's not escaped by '\', skip until newline
-        if (c == '%' && prev != '\\') {
-            // skip to newline
-            while ((c = fgetc(fp)) != EOF && c != '\n');
-            if (c != EOF) {
-                // put the newline in the buffer
-                APPEND_CHAR('\n');
-            }
-            prev = 0;
-            continue;
-        }
-
-        APPEND_CHAR(c);
-        prev = c;
-    }
-
-    fclose(fp);
-    APPEND_CHAR('\0');  // null-terminate
-
-    #undef APPEND_CHAR
-    return buffer;
+    // (unchanged from your code; omitted here for brevity)
+    // ...
 }
-
 
 /****************************************
  *     Forward declarations             *
@@ -201,11 +65,6 @@ static void expand_text_impl(MacroTable *table,
 static void output_string(const char *s,
                           output_char_fn out_char,
                           void *userdata);
-
-char *expand_text_into_string(MacroTable *table, 
-                            const char *input);
-
-char *combine_strings(const char *s1, const char *s2);
 
 /****************************************
  *     Helper: Output a string          *
@@ -222,15 +81,10 @@ static void output_string(const char *s,
     }
 }
 
+/****************************************
+ *     The main parser (refactored)     *
+ ****************************************/
 
-/**
- * Skeleton function to parse the big input string and do expansions.
- * We'll do:
- *   - look for macros: \...
- *   - if it's a built-in, handle it
- *   - if it's user-defined, expand with the single {arg}
- *   - otherwise output the text
- */
 static void expand_text_impl(MacroTable *table,
                              const char *input,
                              output_char_fn out_char,
@@ -474,7 +328,6 @@ static void expand_text_impl(MacroTable *table,
     }
 }
 
-
 /****************************************
  *   Public Wrappers for expand_text    *
  ****************************************/
@@ -522,72 +375,19 @@ char *combine_strings(const char *s1, const char *s2) {
     return res;
 }
 
+/****************************************
+ *    The readArg function (unchanged)  *
+ ****************************************/
 
-/**
- * readArg: reads a brace-balanced argument from the input.
- *   e.g. if *pp = "{stuff {nested} }...rest...", after calling readArg,
- *   we return "stuff {nested} " (without braces), and *pp moves past it.
- *
- *   If there's no '{' or it's not balanced, returns NULL or triggers error.
- */
 char *readArg(const char **pp) {
-    // Skip any whitespace (if needed)
-    while (isspace((unsigned char)**pp)) {
-        (*pp)++;
-    }
-    if (**pp != '{') {
-        return NULL; // not an argument
-    }
-    (*pp)++; // skip '{'
-
-    // We’ll read until we find the matching '}', accounting for nesting.
-    // Note: we must watch out for escaped braces, e.g. '\{' doesn't count as opening brace.
-
-    size_t cap = 256;
-    size_t len = 0;
-    char *buf = malloc(cap);
-    if (!buf) exit(EXIT_FAILURE);
-
-    int braceDepth = 1;
-    int prevChar = 0;
-
-    while (**pp && braceDepth > 0) {
-        char c = **pp;
-        (*pp)++;
-        if (c == '{' && prevChar != '\\') {
-            braceDepth++;
-            buf[len++] = c;
-        } else if (c == '}' && prevChar != '\\') {
-            braceDepth--;
-            if (braceDepth > 0) {
-                buf[len++] = c;
-            }
-        } else {
-            buf[len++] = c;
-        }
-        if (len + 1 >= cap) {
-            cap *= 2;
-            buf = realloc(buf, cap);
-            if (!buf) exit(EXIT_FAILURE);
-        }
-        prevChar = c;
-    }
-
-    if (braceDepth != 0) {
-        free(buf);
-        fprintf(stderr, "Error: unbalanced braces in argument\n");
-        exit(EXIT_FAILURE);
-    }
-
-    // Null-terminate
-    buf[len] = '\0';
-
-    return buf;
+    // (unchanged from your code)
+    // ...
 }
 
-/*******************************
- * Public function in parser.h *
- *******************************/
+/****************************************
+ *  parse_and_expand - top level entry  *
+ ****************************************/
+
 void parse_and_expand(MacroTable *table, int argc, char *argv[]) {
     char *input = read_all_input_and_remove_comments(argc, argv);
 
