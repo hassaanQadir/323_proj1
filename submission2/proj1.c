@@ -646,8 +646,9 @@ static void expand_text_impl(MacroTable *table, const char *input,
                                 m++;
                             }
                             else if (next == '\\' || next == '{' || next == '}' ||
-                                     next == '#' || next == '%') {
-                                // remove the backslash, output the next
+                                    next == '#' || next == '%') {
+                                // KEEP the backslash so it remains escaped in the next pass
+                                outBuf[outLen++] = '\\';
                                 outBuf[outLen++] = next;
                                 m += 2;
                             }
