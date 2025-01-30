@@ -330,10 +330,6 @@ static char *combine_strings(const char *s1, const char *s2) {
 // Inside the braces, \{ and \} do *not* count towards braceDepth,
 // so that things like \escape{\{} are valid.
 static char *readArg(const char **pp) {
-    // Skip whitespace first
-    while (isspace((unsigned char)**pp)) {
-        (*pp)++;
-    }
     // Must start with '{'
     if (**pp != '{') {
         return NULL; 
@@ -404,7 +400,7 @@ static char *readArg(const char **pp) {
 }
 
 /****************************************
- * readMacroName (FIX #1: dynamic reading)
+ * readMacroName
  ****************************************/
 static char *readMacroName(const char **pp)
 {
@@ -466,7 +462,6 @@ static void expand_text_impl(MacroTable *table, const char *input,
                 continue;
             }
             else if (isalnum((unsigned char)*p)) {
-                // (FIX #2) Use the new dynamic readMacroName function.
                 char *nameBuf = readMacroName(&p);
 
                 // handle built-ins vs user-defined
@@ -476,6 +471,10 @@ static void expand_text_impl(MacroTable *table, const char *input,
                     char *arg2 = readArg(&p); // VALUE
                     if (!arg1 || !*arg1) {
                         fprintf(stderr, "Error: invalid macro name in \\def\n");
+                        exit(EXIT_FAILURE);
+                    }
+                    if (!arg2 || !*arg2) {
+                        fprintf(stderr, "Error: invalid value in \\def\n");
                         exit(EXIT_FAILURE);
                     }
                     // check all alnum
@@ -552,19 +551,29 @@ static void expand_text_impl(MacroTable *table, const char *input,
                 }
                 else if (strcmp(nameBuf, "include") == 0) {
                     free(nameBuf);
-                    char *pathArg = readArg(&p);
+                    char *pathArg = readArg(&p);  // e.g. "/c/cs323/proj1/tests/t39a"
                     if (!pathArg) {
                         fprintf(stderr, "Error: \\include requires 1 argument\n");
                         exit(EXIT_FAILURE);
                     }
+
+                    // 'p' now points to whatever comes after the '}' in \include{pathArg}...
                     const char *remaining = p;
+
+                    // Read the included file into a string (already removes comments)
                     char *includedText = read_included_file(pathArg);
 
-                    expand_text_impl(table, includedText, out_char, userdata);
-                    expand_text_impl(table, remaining, out_char, userdata);
+                    // Merge included file text + leftover main input into one buffer
+                    char *combined = combine_strings(includedText, remaining);
+
+                    // Expand them together so braces can match across the boundary
+                    expand_text_impl(table, combined, out_char, userdata);
 
                     free(includedText);
                     free(pathArg);
+                    free(combined);
+
+                    // Return so we don't expand 'remaining' again
                     return;
                 }
                 else if (strcmp(nameBuf, "expandafter") == 0) {
