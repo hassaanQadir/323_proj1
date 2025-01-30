@@ -577,31 +577,44 @@ static void expand_text_impl(MacroTable *table, const char *input,
                     return;
                 }
                 else if (strcmp(nameBuf, "expandafter") == 0) {
-                    free(nameBuf);
-                    char *beforeArg = readArg(&p);
-                    char *afterArg  = readArg(&p);
+                    free(nameBuf);  // done with "expandafter"
+
+                    char *beforeArg = readArg(&p); // {BEFORE}
+                    char *afterArg  = readArg(&p); // {AFTER}
+
                     if (!beforeArg || !afterArg) {
                         fprintf(stderr, "Error: \\expandafter requires 2 arguments\n");
                         exit(EXIT_FAILURE);
                     }
-                    const char *remaining = p;
 
-                    // 1) expand AFTER fully into a string
+                    // "remaining" is whatever is left in the input after consuming
+                    // \expandafter{...}{...}
+                    const char *remaining = p;  
+
+                    // (1) expand AFTER fully
                     char *expandedAfter = expand_text_into_string(table, afterArg);
-                    // 2) combine
+
+                    // (2) combine: BEFORE + expanded(AFTER)
                     char *combined = combine_strings(beforeArg, expandedAfter);
 
-                    // 3) expand combined from the start
-                    expand_text_impl(table, combined, out_char, userdata);
-                    // 4) then expand leftover
-                    expand_text_impl(table, remaining, out_char, userdata);
+                    // (3) Now also tack on the leftover, so everything is one string
+                    //     That way the next braces will be seen as an argument if they
+                    //     immediately follow \aardvark in combined.
+                    char *all = combine_strings(combined, remaining);
+
+                    // (4) parse `all` in a single pass
+                    expand_text_impl(table, all, out_char, userdata);
 
                     free(beforeArg);
                     free(afterArg);
                     free(expandedAfter);
                     free(combined);
+                    free(all);
+
+                    // We are done.  Return so we don't double-parse leftover.
                     return;
                 }
+
                 else {
                     // user-defined macro
                     char *macroVal = lookup_macro(table, nameBuf);
