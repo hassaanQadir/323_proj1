@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L  // Needed if you use strdup on some systems
+#define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,32 +6,24 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-/* 
- * A singly-linked list node representing a macro with a name and value.
- */
-typedef struct Macro {
+// A singly-linked list node representing a macro with a name and a value
+typedef struct Macro{
     char *name;
     char *value;
     struct Macro *next;
 } Macro;
 
-/* 
- * The macro table simply tracks the head of the linked list.
- */
+// The macro table tracks the head of the linked list
 typedef struct {
     Macro *head;
 } MacroTable;
 
-/* 
- * Initialize the macro table (sets head to NULL).
- */
+// Initialize the macro table (sets head to NULL)
 static void init_macro_table(MacroTable *table) {
     table->head = NULL;
 }
 
-/* 
- * Helper to allocate and initialize a new Macro struct.
- */
+// Helper to allocate and initialize a new Macro struct
 static Macro *create_macro(const char *name, const char *value) {
     Macro *m = malloc(sizeof(Macro));
     if (!m) {
@@ -52,12 +44,10 @@ static Macro *create_macro(const char *name, const char *value) {
     return m;
 }
 
-/* 
- * Define a new macro in the table (inserts at the head of the list).
- * Exits with an error if the macro already exists.
- */
+// Defines a new macro in the table (inserts at the head of the list)
+// Exits with an error if the macro already exists
 static void define_macro(MacroTable *table, const char *name, const char *value) {
-    for (Macro *cur = table->head; cur; cur = cur->next) {
+    for (Macro *cur = table->head; cur; cur=cur->next) {
         if (strcmp(cur->name, name) == 0) {
             fprintf(stderr, "Error: Macro '%s' already defined\n", name);
             exit(EXIT_FAILURE);
@@ -68,10 +58,8 @@ static void define_macro(MacroTable *table, const char *name, const char *value)
     table->head = new_macro;
 }
 
-/* 
- * Undefine (remove) a macro from the table by name.
- * Exits with an error if the macro is not found.
- */
+// Undefine a macro from the table by name
+// Exits with an error if the macro is not found
 static void undef_macro(MacroTable *table, const char *name) {
     Macro *prev = NULL;
     Macro *cur = table->head;
@@ -91,15 +79,11 @@ static void undef_macro(MacroTable *table, const char *name) {
         prev = cur;
         cur = cur->next;
     }
-
     fprintf(stderr, "Error: Cannot undefine '%s' - not defined\n", name);
     exit(EXIT_FAILURE);
 }
 
-/* 
- * Look up a macro by name and return its value,
- * or NULL if not found.
- */
+// Look up a macro by name and return its value, or NULL if not found
 static char *lookup_macro(MacroTable *table, const char *name) {
     for (Macro *cur = table->head; cur; cur = cur->next) {
         if (strcmp(cur->name, name) == 0) {
@@ -109,9 +93,7 @@ static char *lookup_macro(MacroTable *table, const char *name) {
     return NULL;
 }
 
-/* 
- * Free all memory used by the macro table.
- */
+// Free all memory used by the macro table
 static void free_macro_table(MacroTable *table) {
     Macro *cur = table->head;
     while (cur) {
@@ -124,40 +106,32 @@ static void free_macro_table(MacroTable *table) {
     table->head = NULL;
 }
 
-/* 
- * We'll define a function pointer type to handle output of characters,
- * so we can either print to stdout or accumulate in a buffer.
- */
+// Define a function pointer to handle output of characters to
+// either print to stdout or accumulate in a buffer
 typedef void (*output_char_fn)(char c, void *userdata);
 
-/* 
- * A simple struct used when we expand text into a dynamically grown buffer.
- */
+// A simple struct to expand text into a dynamic buffer
 typedef struct {
     char *buf;
     size_t len;
     size_t cap;
 } OutputBuffer;
 
-/* Forward declarations */
+// Forward declarations
 static void expand_text_impl(MacroTable *table, const char *input,
                              output_char_fn out_char, void *userdata);
 static char *expand_text_into_string(MacroTable *table, const char *input);
 static char *combine_strings(const char *s1, const char *s2);
 static char *read_included_file(const char *path);
-static char *readArg(const char **pp);  /* Reads an argument enclosed in braces. */
+static char *readArg(const char **pp);
 
-/* 
- * Output function that writes a character to stdout.
- */
+// Output function that writes a character to stdout
 static void out_char_stdout(char c, void *userdata) {
-    (void)userdata;  /* Unused parameter */
+    (void)userdata;
     putchar(c);
 }
 
-/* 
- * Output function that appends a character to an OutputBuffer.
- */
+// Output function that appends a character to an OutputBuffer
 static void out_char_buffer(char c, void *userdata) {
     OutputBuffer *ob = (OutputBuffer *)userdata;
     if (ob->len + 1 >= ob->cap) {
@@ -172,11 +146,9 @@ static void out_char_buffer(char c, void *userdata) {
     ob->buf[ob->len] = '\0';
 }
 
-/* 
- * Read all input from either stdin or from files provided on the command line,
- * removing any lines that start with '%' (unless prefixed with a backslash).
- * Also removes leading spaces/tabs after those lines.
- */
+// Read all input from stdin or files from the cmd lne,
+// removing any lines that start with '%' (unless prefixed with a backslash).
+// Also removes leading spaces/tabs after those lines
 static char *read_all_input_and_remove_comments(int argc, char *argv[]) {
     size_t cap = 8192;
     size_t len = 0;
@@ -264,11 +236,9 @@ static char *read_all_input_and_remove_comments(int argc, char *argv[]) {
 #undef APPEND_CHAR
     return buffer;
 }
-
-/* 
- * Read an included file's entire contents, also removing lines 
- * that start with '%', plus leading spaces on new lines.
- */
+        
+// Read an included file's entire contents, also removing lines
+// that start with '%', plus leading spaces on new lines.
 static char *read_included_file(const char *path) {
     FILE *fp = fopen(path, "r");
     if (!fp) {
@@ -325,9 +295,7 @@ static char *read_included_file(const char *path) {
     return buffer;
 }
 
-/* 
- * Expand 'input' into a newly allocated string (returns the string).
- */
+// Expand input into a newly allocated string and return the string
 static char *expand_text_into_string(MacroTable *table, const char *input) {
     OutputBuffer ob;
     ob.len = 0;
@@ -343,9 +311,7 @@ static char *expand_text_into_string(MacroTable *table, const char *input) {
     return ob.buf;
 }
 
-/* 
- * Combine two strings into a newly allocated buffer.
- */
+// Combine two strings into a newly allocated buffer
 static char *combine_strings(const char *s1, const char *s2) {
     size_t len1 = strlen(s1);
     size_t len2 = strlen(s2);
@@ -360,15 +326,13 @@ static char *combine_strings(const char *s1, const char *s2) {
     return res;
 }
 
-/* 
- * Parse a single macro argument of the form { ... }. The braces can be escaped 
- * with backslashes inside, so brace depth only changes when braces are not escaped.
- */
+// Parse a single macro argument of the form { ... }. The braces can be escaped
+// with backslashes inside, so brace depth only changes when braces are not escaped.
 static char *readArg(const char **pp) {
     if (**pp != '{') {
         return NULL;
     }
-    (*pp)++;  /* consume '{' */
+    (*pp)++;
 
     size_t cap = 256;
     size_t len = 0;
@@ -379,7 +343,7 @@ static char *readArg(const char **pp) {
     }
 
     int braceDepth = 1;
-    bool escaped = false;  /* track whether the previous char was a backslash */
+    bool escaped = false;
 
     while (**pp && braceDepth > 0) {
         char c = **pp;
@@ -401,7 +365,7 @@ static char *readArg(const char **pp) {
                 buf[len++] = c;
             }
         } else {
-            /* The previous character was a backslash, so take c literally. */
+            // The previous character was a backslash so take c literally
             buf[len++] = c;
             escaped = false;
         }
@@ -426,10 +390,8 @@ static char *readArg(const char **pp) {
     return buf;
 }
 
-/* 
- * Read a macro name starting immediately after a backslash.
- * Continues while the characters are alphanumeric.
- */
+// Read a macro name starting immediately after a backslash
+// Continues while the characters are alphanumeric
 static char *readMacroName(const char **pp) {
     size_t cap = 256;
     size_t len = 0;
@@ -455,10 +417,8 @@ static char *readMacroName(const char **pp) {
     return buf;
 }
 
-/* 
- * The core function that parses and expands the input text.
- * It checks for backslash commands, macros, builtins, etc.
- */
+// The core function parses and expands the input
+// Checks for backslash commands, macros, builtins, etc
 static void expand_text_impl(MacroTable *table, const char *input,
                              output_char_fn out_char, void *userdata) {
     const char *p = input;
@@ -703,19 +663,15 @@ static void expand_text_impl(MacroTable *table, const char *input,
     }
 }
 
-/* 
- * Public function that reads input, then parses and expands it to stdout.
- */
+// Public function that reads input, then parses and expands it
 static void parse_and_expand(MacroTable *table, int argc, char *argv[]) {
     char *input = read_all_input_and_remove_comments(argc, argv);
     expand_text_impl(table, input, out_char_stdout, NULL);
     free(input);
 }
 
-/* 
- * Main function: sets up the macro table, processes input, expands macros,
- * then frees everything.
- */
+// Main function to set up macro table, process input, expand macros,
+// then free everything
 int main(int argc, char *argv[]) {
     MacroTable table;
     init_macro_table(&table);
